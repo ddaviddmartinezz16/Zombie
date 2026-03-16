@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>VIRUSLAB — Escape</title>
+<style>
+  /* ===================== RESET & BASE ===================== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --green: #00ff88;
+    --red: #ff2244;
+    --yellow: #ffdd00;
+    --blue: #00aaff;
+    --bg: #000;
+    --ui-bg: rgba(0,0,0,0.75);
+    --font: 'Courier New', monospace;
+  }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    font-family: var(--font);
+    color: var(--green);
+    touch-action: none;
+  }
+
+/* ===================== CANVAS ===================== */
+#gameCanvas {
+display: block;
+position: absolute;
+top: 0; left: 0;
+width: 100%; height: 100%;
+}
+
+/* ===================== HUD ===================== */
+#hud {
+position: absolute;
+top: 12px; left: 50%;
+transform: translateX(-50%);
+display: flex;
+gap: 18px;
+align-items: center;
+background: var(–ui-bg);
+border: 1px solid var(–green);
+border-radius: 8px;
+padding: 6px 16px;
+z-index: 10;
+pointer-events: none;
+white-space: nowrap;
+}
+#hud .label { font-size: 10px; opacity: 0.6; letter-spacing: 2px; }
+#hud .val   { font-size: 14px; font-weight: bold; }
+#keysDisplay { color: var(–yellow); }
+#timerDisplay { color: var(–blue); }
+
+/* Stamina bar */
+#staminaBar {
+position: absolute;
+bottom: 160px; left: 50%;
+transform: translateX(-50%);
+width: 140px;
+z-index: 10;
+pointer-events: none;
+}
+#staminaBar .label { font-size: 9px; letter-spacing: 2px; opacity: 0.7; text-align: center; margin-bottom: 3px; }
+#staminaTrack {
+width: 100%; height: 6px;
+background: rgba(255,255,255,0.1);
+border-radius: 3px;
+overflow: hidden;
+border: 1px solid rgba(0,255,136,0.3);
+}
+#staminaFill {
+height: 100%;
+background: var(–green);
+border-radius: 3px;
+transition: background 0.2s;
+width: 100%;
+}
+
+/* ===================== CONTROLS ===================== */
+#controls {
+position: absolute;
+bottom: 0; left: 0; right: 0;
+height: 150px;
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 0 24px 20px;
+z-index: 10;
+pointer-events: none;
+}
+
+/* Joystick */
+#joystickZone {
+width: 110px; height: 110px;
+border-radius: 50%;
+background: rgba(0,255,136,0.06);
+border: 2px solid rgba(0,255,136,0.25);
+position: relative;
+pointer-events: all;
+touch-action: none;
+user-select: none;
+}
+#joystickKnob {
+width: 44px; height: 44px;
+border-radius: 50%;
+background: radial-gradient(circle at 35% 35%, #00ff88, #007744);
+border: 2px solid rgba(255,255,255,0.3);
+box-shadow: 0 0 12px rgba(0,255,136,0.5);
+position: absolute;
+top: 50%; left: 50%;
+transform: translate(-50%, -50%);
+pointer-events: none;
+transition: box-shadow 0.1s;
+}
+
+/* Sprint button */
+#btnSprint {
+width: 88px; height: 88px;
+border-radius: 50%;
+background: rgba(0,170,255,0.1);
+border: 2px solid rgba(0,170,255,0.4);
+color: var(–blue);
+font-family: var(–font);
+font-size: 10px;
+letter-spacing: 1px;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+gap: 4px;
+pointer-events: all;
+touch-action: none;
+user-select: none;
+cursor: pointer;
+transition: background 0.1s, border-color 0.1s, box-shadow 0.1s;
+}
+#btnSprint:active, #btnSprint.active {
+background: rgba(0,170,255,0.25);
+border-color: var(–blue);
+box-shadow: 0 0 16px rgba(0,170,255,0.6);
+}
+#btnSprint .icon { font-size: 22px; }
+
+/* ===================== OVERLAY SCREENS ===================== */
+.screen {
+position: absolute;
+inset: 0;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+gap: 20px;
+background: rgba(0,0,0,0.92);
+z-index: 20;
+text-align: center;
+padding: 24px;
+}
+.screen.hidden { display: none; }
+.screen h1 { font-size: clamp(28px,8vw,52px); letter-spacing: 6px; line-height: 1.1; }
+.screen p  { font-size: clamp(12px,3.5vw,16px); opacity: 0.7; max-width: 320px; line-height: 1.6; }
+.screen .subtitle { font-size: clamp(10px,3vw,13px); letter-spacing: 3px; opacity: 0.5; text-transform: uppercase; }
+
+.btn {
+padding: 14px 36px;
+border: 2px solid var(–green);
+background: transparent;
+color: var(–green);
+font-family: var(–font);
+font-size: 14px;
+letter-spacing: 3px;
+cursor: pointer;
+border-radius: 4px;
+transition: background 0.15s, box-shadow 0.15s;
+touch-action: manipulation;
+}
+.btn:active { background: rgba(0,255,136,0.15); box-shadow: 0 0 20px rgba(0,255,136,0.4); }
+
+#screenWin h1  { color: var(–yellow); }
+#screenWin .btn { border-color: var(–yellow); color: var(–yellow); }
+#screenWin .btn:active { background: rgba(255,221,0,0.15); }
+#screenLose h1 { color: var(–red); }
+#screenLose .btn { border-color: var(–red); color: var(–red); }
+#screenLose .btn:active { background: rgba(255,34,68,0.15); }
+
+/* Scanline overlay */
+#scanlines {
+position: absolute; inset: 0;
+background: repeating-linear-gradient(
+to bottom,
+transparent 0px, transparent 3px,
+rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 4px
+);
+pointer-events: none;
+z-index: 30;
+opacity: 0.5;
+}
+</style>
+
+</head>
+<body>
+
+<!-- CANVAS -->
+
+<canvas id="gameCanvas"></canvas>
+
+<!-- HUD -->
+
+<div id="hud">
+  <div>
+    <div class="label">LLAVES</div>
+    <div class="val" id="keysDisplay">0/3</div>
+  </div>
+  <div style="width:1px;height:30px;background:rgba(0,255,136,0.3)"></div>
+  <div>
+    <div class="label">TIEMPO</div>
+    <div class="val" id="timerDisplay">00:00</div>
+  </div>
+  <div style="width:1px;height:30px;background:rgba(0,255,136,0.3)"></div>
+  <div>
+    <div class="label">VIRUS</div>
+    <div class="val" id="virusDisplay" style="color:var(--red)">⚠ ACTIVO</div>
+  </div>
+</div>
+
+<!-- STAMINA BAR -->
+
+<div id="staminaBar">
+  <div class="label">STAMINA</div>
+  <div id="staminaTrack"><div id="staminaFill"></div></div>
+</div>
+
+<!-- CONTROLS -->
+
+<div id="controls">
+  <div id="joystickZone"><div id="joystickKnob"></div></div>
+  <button id="btnSprint"><span class="icon">⚡</span>SPRINT</button>
+</div>
+
+<!-- SCREEN: START -->
+
+<div class="screen" id="screenStart">
+  <div class="subtitle">VIRUSLAB</div>
+  <h1 style="color:var(--green)">ESCAPE<br>PROTOCOL</h1>
+  <p>Recoge las 3 llaves 🔑 y llega a la salida 🚪.<br>Evita el Virus a toda costa.</p>
+  <div style="font-size:12px;opacity:0.5;letter-spacing:1px;line-height:2">
+    🕹️ JOYSTICK — Mover<br>
+    ⚡ SPRINT — Correr<br>
+    🔦 Linterna — Sigue tu movimiento
+  </div>
+  <button class="btn" id="btnStart">INICIAR</button>
+</div>
+
+<!-- SCREEN: WIN -->
+
+<div class="screen hidden" id="screenWin">
+  <div class="subtitle">MISIÓN CUMPLIDA</div>
+  <h1>¡ESCAPASTE!</h1>
+  <p id="winTime"></p>
+  <button class="btn" id="btnRestart1">JUGAR DE NUEVO</button>
+</div>
+
+<!-- SCREEN: LOSE -->
+
+<div class="screen hidden" id="screenLose">
+  <div class="subtitle">INFECTADO</div>
+  <h1>GAME<br>OVER</h1>
+  <p>El Virus te alcanzó. Intenta de nuevo.</p>
+  <button class="btn" id="btnRestart2">REINTENTAR</button>
+</div>
+
+<!-- Scanlines -->
+
+<div id="scanlines"></div>
+
+<script>
+// ============================================================
+// VIRUSLAB ESCAPE — Single Player Core
+// Archivo: index.html  (repo raíz o /docs para GitHub Pages)
+// ============================================================
+
+// ---- CANVAS SETUP ----
+const canvas  = document.getElementById('gameCanvas');
+const ctx     = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ---- MAPA (Laberinto) ----
+// Cada celda: 0=libre, 1=pared
+// El mapa se escala al tamaño de pantalla
+const COLS = 21, ROWS = 21;
+const CELL = () => Math.min(Math.floor(W / COLS), Math.floor(H / ROWS));
+
+// Generación de laberinto con DFS recursivo
+function generateMaze() {
+  const grid = Array.from({length: ROWS}, () => new Array(COLS).fill(1));
+  const visited = Array.from({length: ROWS}, () => new Array(COLS).fill(false));
+  const dirs = [[0,-2],[0,2],[-2,0],[2,0]];
+
+  function carve(r, c) {
+    visited[r][c] = true;
+    grid[r][c] = 0;
+    // Shuffle directions
+    const d = dirs.slice().sort(() => Math.random() - 0.5);
+    for (const [dr, dc] of d) {
+      const nr = r + dr, nc = c + dc;
+      if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && !visited[nr][nc]) {
+        grid[r + dr/2][c + dc/2] = 0; // remove wall between
+        carve(nr, nc);
+      }
+    }
+  }
+  carve(1, 1);
+  // Asegurar bordes como pared
+  for (let r = 0; r < ROWS; r++) { grid[r][0] = 1; grid[r][COLS-1] = 1; }
+  for (let c = 0; c < COLS; c++) { grid[0][c] = 1; grid[ROWS-1][c] = 1; }
+  return grid;
+}
+
+let maze = [];
+
+// Obtener posición en pixel del centro de una celda
+function cellToWorld(r, c) {
+  const cs = CELL();
+  const offX = (W - cs * COLS) / 2;
+  const offY = (H - cs * ROWS) / 2;
+  return { x: offX + c * cs + cs / 2, y: offY + r * cs + cs / 2 };
+}
+
+// Obtener celda desde coordenada mundo
+function worldToCell(x, y) {
+  const cs = CELL();
+  const offX = (W - cs * COLS) / 2;
+  const offY = (H - cs * ROWS) / 2;
+  return {
+    r: Math.floor((y - offY) / cs),
+    c: Math.floor((x - offX) / cs)
+  };
+}
+
+// ¿La posición (x,y) con radio r colisiona con paredes?
+function collidesWall(x, y, r) {
+  const cs = CELL();
+  const offX = (W - cs * COLS) / 2;
+  const offY = (H - cs * ROWS) / 2;
+  // Check esquinas del círculo
+  const checks = [
+    [x - r, y], [x + r, y], [x, y - r], [x, y + r],
+    [x - r*0.7, y - r*0.7], [x + r*0.7, y - r*0.7],
+    [x - r*0.7, y + r*0.7], [x + r*0.7, y + r*0.7]
+  ];
+  for (const [cx, cy] of checks) {
+    const rc = Math.floor((cy - offY) / cs);
+    const cc = Math.floor((cx - offX) / cs);
+    if (rc < 0 || rc >= ROWS || cc < 0 || cc >= COLS) return true;
+    if (maze[rc][cc] === 1) return true;
+  }
+  return false;
+}
+
+// ---- ESTADO DEL JUEGO ----
+let gameState = 'start'; // start | playing | win | lose
+let keys = 0;
+let startTime = 0;
+let elapsed = 0;
+
+// Busca celdas libres
+function freeCells() {
+  const free = [];
+  for (let r = 1; r < ROWS - 1; r++)
+    for (let c = 1; c < COLS - 1; c++)
+      if (maze[r][c] === 0) free.push({r, c});
+  return free;
+}
+
+function pickRandom(arr, exclude = []) {
+  const pool = arr.filter(a => !exclude.some(e => e.r === a.r && e.c === a.c));
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// ---- JUGADOR ----
+const player = {
+  x: 0, y: 0, r: 0,
+  vx: 0, vy: 0,
+  speed: 0,
+  baseSpeed: 0,
+  sprintSpeed: 0,
+  stamina: 100,
+  maxStamina: 100,
+  sprinting: false,
+  angle: 0, // dirección del movimiento
+};
+
+// ---- VIRUS (ENEMIGO) ----
+const virus = {
+  x: 0, y: 0, r: 0,
+  speed: 0,
+  angle: 0,
+  detectionRange: 0,
+  chasing: false,
+  // Para pathfinding simple: BFS waypoints
+  path: [],
+  pathTimer: 0,
+};
+
+// ---- OBJETOS ----
+let keyItems = [];   // { x, y, r, collected }
+let exitDoor = { x: 0, y: 0, r: 0, active: false };
+
+// ---- INICIALIZAR JUEGO ----
+function initGame() {
+  maze = generateMaze();
+  const cs = CELL();
+  const free = freeCells();
+
+  // Jugador — esquina top-left libre
+  const pCell = { r: 1, c: 1 };
+  const pw = cellToWorld(pCell.r, pCell.c);
+  player.x = pw.x; player.y = pw.y;
+  player.r = cs * 0.28;
+  player.baseSpeed  = cs * 0.065;
+  player.sprintSpeed = cs * 0.13;
+  player.stamina = player.maxStamina;
+  player.vx = 0; player.vy = 0;
+  player.angle = 0;
+  player.sprinting = false;
+
+  // Virus — esquina bottom-right
+  const vCell = { r: ROWS - 2, c: COLS - 2 };
+  const vw = cellToWorld(vCell.r, vCell.c);
+  virus.x = vw.x; virus.y = vw.y;
+  virus.r = cs * 0.3;
+  virus.speed = cs * 0.038;
+  virus.detectionRange = cs * 6;
+  virus.chasing = false;
+  virus.path = [];
+  virus.pathTimer = 0;
+  virus.angle = 0;
+
+  // Llaves — celdas aleatorias alejadas del jugador
+  keys = 0;
+  const usedCells = [pCell, vCell];
+  keyItems = [];
+  for (let i = 0; i < 3; i++) {
+    const kc = pickRandom(free, usedCells);
+    usedCells.push(kc);
+    const kw = cellToWorld(kc.r, kc.c);
+    keyItems.push({ x: kw.x, y: kw.y, r: cs * 0.22, collected: false });
+  }
+
+  // Salida — celda aleatoria
+  const ec = pickRandom(free, usedCells);
+  const ew = cellToWorld(ec.r, ec.c);
+  exitDoor = { x: ew.x, y: ew.y, r: cs * 0.35, active: false };
+
+  startTime = performance.now();
+  elapsed = 0;
+  gameState = 'playing';
+  updateHUD();
+}
+
+// ---- JOYSTICK ----
+const joy = {
+  active: false,
+  id: null,
+  startX: 0, startY: 0,
+  dx: 0, dy: 0,
+  maxDist: 40,
+};
+
+const joystickZone = document.getElementById('joystickZone');
+const joystickKnob = document.getElementById('joystickKnob');
+
+function joyStart(e) {
+  e.preventDefault();
+  const t = e.changedTouches ? e.changedTouches[0] : e;
+  joy.active = true;
+  joy.id = t.identifier ?? 0;
+  const rect = joystickZone.getBoundingClientRect();
+  joy.startX = rect.left + rect.width / 2;
+  joy.startY = rect.top  + rect.height / 2;
+  joy.dx = 0; joy.dy = 0;
+}
+function joyMove(e) {
+  e.preventDefault();
+  if (!joy.active) return;
+  const touches = e.changedTouches ? [...e.changedTouches] : [e];
+  const t = touches.find(t => t.identifier === joy.id) || touches[0];
+  const rawDx = t.clientX - joy.startX;
+  const rawDy = t.clientY - joy.startY;
+  const dist  = Math.hypot(rawDx, rawDy);
+  const clamped = Math.min(dist, joy.maxDist);
+  joy.dx = (rawDx / (dist || 1)) * clamped;
+  joy.dy = (rawDy / (dist || 1)) * clamped;
+  // Mover knob visualmente
+  joystickKnob.style.transform = `translate(calc(-50% + ${joy.dx}px), calc(-50% + ${joy.dy}px))`;
+}
+function joyEnd(e) {
+  e.preventDefault();
+  joy.active = false;
+  joy.dx = 0; joy.dy = 0;
+  joystickKnob.style.transform = 'translate(-50%, -50%)';
+}
+
+joystickZone.addEventListener('touchstart', joyStart, {passive: false});
+joystickZone.addEventListener('touchmove',  joyMove,  {passive: false});
+joystickZone.addEventListener('touchend',   joyEnd,   {passive: false});
+// Mouse fallback
+joystickZone.addEventListener('mousedown', joyStart);
+window.addEventListener('mousemove',  e => joy.active && joyMove(e));
+window.addEventListener('mouseup',    e => joy.active && joyEnd(e));
+
+// ---- SPRINT BUTTON ----
+const btnSprint = document.getElementById('btnSprint');
+let sprintPressed = false;
+
+btnSprint.addEventListener('touchstart', e => { e.preventDefault(); sprintPressed = true; btnSprint.classList.add('active'); }, {passive: false});
+btnSprint.addEventListener('touchend',   e => { e.preventDefault(); sprintPressed = false; btnSprint.classList.remove('active'); }, {passive: false});
+btnSprint.addEventListener('mousedown',  () => { sprintPressed = true;  btnSprint.classList.add('active'); });
+window.addEventListener('mouseup',       () => { sprintPressed = false; btnSprint.classList.remove('active'); });
+
+// Teclado (debug en desktop)
+const kb = {};
+window.addEventListener('keydown', e => { kb[e.key] = true; });
+window.addEventListener('keyup',   e => { kb[e.key] = false; });
+
+// ---- BFS PATHFINDING (Virus) ----
+function bfsPath(fromR, fromC, toR, toC) {
+  if (maze[fromR]?.[fromC] === 1 || maze[toR]?.[toC] === 1) return [];
+  const q = [[fromR, fromC, []]];
+  const seen = new Set([`${fromR},${fromC}`]);
+  const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+  while (q.length) {
+    const [r, c, path] = q.shift();
+    if (r === toR && c === toC) return path;
+    for (const [dr, dc] of dirs) {
+      const nr = r + dr, nc = c + dc;
+      const key = `${nr},${nc}`;
+      if (!seen.has(key) && maze[nr]?.[nc] === 0) {
+        seen.add(key);
+        q.push([nr, nc, [...path, {r: nr, c: nc}]]);
+      }
+    }
+  }
+  return [];
+}
+
+// ---- HUD ----
+const keysDisplay  = document.getElementById('keysDisplay');
+const timerDisplay = document.getElementById('timerDisplay');
+const staminaFill  = document.getElementById('staminaFill');
+
+function updateHUD() {
+  keysDisplay.textContent = `${keys}/3`;
+  const s = Math.floor(elapsed / 1000);
+  const m = Math.floor(s / 60);
+  timerDisplay.textContent = `${String(m).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
+  const pct = (player.stamina / player.maxStamina) * 100;
+  staminaFill.style.width = pct + '%';
+  staminaFill.style.background = pct < 25 ? 'var(--red)' : pct < 50 ? 'var(--yellow)' : 'var(--green)';
+}
+
+// ---- COLISIÓN CÍRCULO-CÍRCULO ----
+function circleCollide(ax, ay, ar, bx, by, br) {
+  return Math.hypot(ax - bx, ay - by) < ar + br;
+}
+
+// ---- LÓGICA DE ACTUALIZACIÓN (60fps) ----
+let lastTime = 0;
+
+function update(ts) {
+  if (gameState !== 'playing') return;
+  const dt = Math.min((ts - lastTime) / 16.67, 3); // normalizado a ~1 en 60fps
+  lastTime = ts;
+  elapsed = ts - startTime;
+
+  // --- INPUT JUGADOR ---
+  let dx = joy.dx / joy.maxDist;
+  let dy = joy.dy / joy.maxDist;
+
+  // Teclado fallback
+  if (kb['ArrowLeft'] || kb['a']) dx -= 1;
+  if (kb['ArrowRight']|| kb['d']) dx += 1;
+  if (kb['ArrowUp']   || kb['w']) dy -= 1;
+  if (kb['ArrowDown'] || kb['s']) dy += 1;
+
+  const mag = Math.hypot(dx, dy);
+  if (mag > 1) { dx /= mag; dy /= mag; }
+
+  // Sprint
+  const canSprint = (sprintPressed || kb[' '] || kb['Shift']) && player.stamina > 0;
+  player.sprinting = canSprint && mag > 0.1;
+  player.speed = player.sprinting ? player.sprintSpeed : player.baseSpeed;
+
+  // Stamina
+  if (player.sprinting) {
+    player.stamina = Math.max(0, player.stamina - 0.8 * dt);
+  } else {
+    player.stamina = Math.min(player.maxStamina, player.stamina + 0.35 * dt);
+  }
+
+  // Mover jugador (con colisión de pared separada por eje)
+  if (mag > 0.05) {
+    player.angle = Math.atan2(dy, dx);
+    const step = player.speed * dt;
+    const nx = player.x + dx * step;
+    const ny = player.y + dy * step;
+    if (!collidesWall(nx, player.y, player.r)) player.x = nx;
+    if (!collidesWall(player.x, ny, player.r)) player.y = ny;
+  }
+
+  // --- IA VIRUS ---
+  const dist = Math.hypot(player.x - virus.x, player.y - virus.y);
+  virus.chasing = dist < virus.detectionRange;
+
+  virus.pathTimer -= dt;
+  if (virus.chasing && virus.pathTimer <= 0) {
+    virus.pathTimer = 45; // Recalcular path cada ~45 frames
+    const from = worldToCell(virus.x, virus.y);
+    const to   = worldToCell(player.x, player.y);
+    virus.path = bfsPath(from.r, from.c, to.r, to.c);
+  }
+  if (!virus.chasing) virus.path = [];
+
+  // Mover virus hacia siguiente waypoint
+  if (virus.path.length > 0) {
+    const next = cellToWorld(virus.path[0].r, virus.path[0].c);
+    const vdx = next.x - virus.x;
+    const vdy = next.y - virus.y;
+    const vdist = Math.hypot(vdx, vdy);
+    virus.angle = Math.atan2(vdy, vdx);
+    if (vdist < virus.speed * dt * 2) {
+      virus.path.shift();
+    } else {
+      const vStep = virus.speed * dt;
+      const vnx = virus.x + (vdx / vdist) * vStep;
+      const vny = virus.y + (vdy / vdist) * vStep;
+      if (!collidesWall(vnx, virus.y, virus.r)) virus.x = vnx;
+      if (!collidesWall(virus.x, vny, virus.r)) virus.y = vny;
+    }
+  }
+
+  // --- RECOGER LLAVES ---
+  for (const k of keyItems) {
+    if (!k.collected && circleCollide(player.x, player.y, player.r, k.x, k.y, k.r)) {
+      k.collected = true;
+      keys++;
+      if (keys === 3) exitDoor.active = true;
+    }
+  }
+
+  // --- SALIDA ---
+  if (exitDoor.active && circleCollide(player.x, player.y, player.r, exitDoor.x, exitDoor.y, exitDoor.r)) {
+    endGame('win');
+    return;
+  }
+
+  // --- COLISIÓN VIRUS-JUGADOR ---
+  if (circleCollide(player.x, player.y, player.r, virus.x, virus.y, virus.r)) {
+    endGame('lose');
+    return;
+  }
+
+  updateHUD();
+}
+
+// ---- RENDER ----
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  if (gameState !== 'playing') return;
+
+  const cs = CELL();
+  const offX = (W - cs * COLS) / 2;
+  const offY = (H - cs * ROWS) / 2;
+
+  // --- PAREDES y SUELO (sin fog aún) ---
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const wx = offX + c * cs;
+      const wy = offY + r * cs;
+      if (maze[r][c] === 1) {
+        ctx.fillStyle = '#0a1a0a';
+        ctx.fillRect(wx, wy, cs, cs);
+        // Borde interior sutil
+        ctx.strokeStyle = 'rgba(0,80,30,0.4)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(wx + 0.5, wy + 0.5, cs - 1, cs - 1);
+      } else {
+        ctx.fillStyle = '#050d05';
+        ctx.fillRect(wx, wy, cs, cs);
+        // Grid sutil
+        ctx.strokeStyle = 'rgba(0,40,15,0.5)';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(wx, wy, cs, cs);
+      }
+    }
+  }
+
+  // --- SALIDA ---
+  if (exitDoor.active) {
+    ctx.save();
+    ctx.font = `${cs * 0.55}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // Glow pulsante
+    const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 300);
+    ctx.shadowColor = '#ffdd00';
+    ctx.shadowBlur = 20 * pulse;
+    ctx.globalAlpha = pulse;
+    ctx.fillText('🚪', exitDoor.x, exitDoor.y);
+    ctx.restore();
+  } else {
+    // Mostrar salida apagada
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    ctx.font = `${cs * 0.55}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🚪', exitDoor.x, exitDoor.y);
+    ctx.restore();
+  }
+
+  // --- LLAVES ---
+  for (const k of keyItems) {
+    if (k.collected) continue;
+    ctx.save();
+    const t = Date.now() / 600;
+    ctx.translate(k.x, k.y + Math.sin(t) * 3);
+    // Triángulo amarillo (llave)
+    ctx.beginPath();
+    ctx.moveTo(0, -k.r);
+    ctx.lineTo(k.r * 0.866, k.r * 0.5);
+    ctx.lineTo(-k.r * 0.866, k.r * 0.5);
+    ctx.closePath();
+    ctx.fillStyle = '#ffdd00';
+    ctx.shadowColor = '#ffdd00';
+    ctx.shadowBlur = 12;
+    ctx.fill();
+    ctx.strokeStyle = '#fff8aa';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // --- VIRUS ---
+  ctx.save();
+  ctx.translate(virus.x, virus.y);
+  // Cuerpo
+  ctx.beginPath();
+  ctx.arc(0, 0, virus.r, 0, Math.PI * 2);
+  ctx.fillStyle = virus.chasing ? '#ff2244' : '#aa1133';
+  ctx.shadowColor = '#ff2244';
+  ctx.shadowBlur = virus.chasing ? 20 : 8;
+  ctx.fill();
+  // Pinchos
+  const spikes = 8;
+  for (let i = 0; i < spikes; i++) {
+    const a = (i / spikes) * Math.PI * 2 + Date.now() / 800;
+    const len = virus.r * 0.45;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * virus.r, Math.sin(a) * virus.r);
+    ctx.lineTo(Math.cos(a) * (virus.r + len), Math.sin(a) * (virus.r + len));
+    ctx.strokeStyle = '#ff4466';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  // Ojo
+  ctx.beginPath();
+  ctx.arc(virus.r * 0.25, -virus.r * 0.2, virus.r * 0.22, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.shadowBlur = 0;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(virus.r * 0.3, -virus.r * 0.18, virus.r * 0.12, 0, Math.PI * 2);
+  ctx.fillStyle = '#000';
+  ctx.fill();
+  ctx.restore();
+
+  // --- JUGADOR ---
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  // Sprint glow
+  if (player.sprinting) {
+    ctx.beginPath();
+    ctx.arc(0, 0, player.r * 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,170,255,0.15)';
+    ctx.fill();
+  }
+  // Cuerpo
+  ctx.beginPath();
+  ctx.arc(0, 0, player.r, 0, Math.PI * 2);
+  ctx.fillStyle = '#00ff88';
+  ctx.shadowColor = '#00ff88';
+  ctx.shadowBlur = 16;
+  ctx.fill();
+  // Pupila (dirección)
+  const eyeX = Math.cos(player.angle) * player.r * 0.35;
+  const eyeY = Math.sin(player.angle) * player.r * 0.35;
+  ctx.beginPath();
+  ctx.arc(eyeX, eyeY, player.r * 0.2, 0, Math.PI * 2);
+  ctx.fillStyle = '#003322';
+  ctx.shadowBlur = 0;
+  ctx.fill();
+  ctx.restore();
+
+  // ========= FOG OF WAR / LINTERNA =========
+  drawFog();
+}
+
+// ---- FOG OF WAR + LINTERNA ----
+function drawFog() {
+  // Usamos compositing para "recortar" la oscuridad
+  const px = player.x, py = player.y;
+  const cs = CELL();
+
+  // Cone settings
+  const coneAngle = Math.PI * (120 / 180); // 120°
+  const coneLen   = cs * 5.5;
+  const nearR     = cs * 1.4;
+
+  // Offscreen canvas para el fog (se puede cachear si el mapa no cambia)
+  const fog = ctx; // dibujar directamente con compositing
+
+  fog.save();
+
+  // Crear máscara de oscuridad
+  fog.globalCompositeOperation = 'source-over';
+
+  // Oscuridad total fuera de la linterna
+  fog.fillStyle = 'rgba(0,0,0,0.97)';
+  fog.fillRect(0, 0, W, H);
+
+  // Ahora "borrar" (destination-out) donde hay luz
+  fog.globalCompositeOperation = 'destination-out';
+
+  // 1. Zona cercana (radio pequeño alrededor del jugador)
+  const nearGrad = fog.createRadialGradient(px, py, 0, px, py, nearR);
+  nearGrad.addColorStop(0,   'rgba(0,0,0,1)');
+  nearGrad.addColorStop(0.7, 'rgba(0,0,0,0.9)');
+  nearGrad.addColorStop(1,   'rgba(0,0,0,0)');
+  fog.fillStyle = nearGrad;
+  fog.beginPath();
+  fog.arc(px, py, nearR, 0, Math.PI * 2);
+  fog.fill();
+
+  // 2. Cono de linterna
+  const halfCone = coneAngle / 2;
+  const startA = player.angle - halfCone;
+  const endA   = player.angle + halfCone;
+
+  // Gradiente a lo largo del cono
+  const grad = fog.createRadialGradient(px, py, nearR * 0.5, px, py, coneLen);
+  grad.addColorStop(0,   'rgba(0,0,0,1)');
+  grad.addColorStop(0.75,'rgba(0,0,0,0.85)');
+  grad.addColorStop(1,   'rgba(0,0,0,0)');
+  fog.fillStyle = grad;
+  fog.beginPath();
+  fog.moveTo(px, py);
+  fog.arc(px, py, coneLen, startA, endA);
+  fog.closePath();
+  fog.fill();
+
+  fog.restore();
+}
+
+// ---- GAME OVER / WIN ----
+function endGame(result) {
+  gameState = result;
+  if (result === 'win') {
+    const s = Math.floor(elapsed / 1000);
+    const m = Math.floor(s / 60);
+    document.getElementById('winTime').textContent =
+      `Tiempo: ${String(m).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+    document.getElementById('screenWin').classList.remove('hidden');
+  } else {
+    document.getElementById('screenLose').classList.remove('hidden');
+  }
+}
+
+// ---- LOOP PRINCIPAL ----
+function loop(ts) {
+  update(ts);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ---- BOTONES UI ----
+document.getElementById('btnStart').addEventListener('click', () => {
+  document.getElementById('screenStart').classList.add('hidden');
+  initGame();
+  lastTime = performance.now();
+  requestAnimationFrame(loop);
+});
+
+function restartGame() {
+  document.getElementById('screenWin').classList.add('hidden');
+  document.getElementById('screenLose').classList.add('hidden');
+  initGame();
+  lastTime = performance.now();
+}
+document.getElementById('btnRestart1').addEventListener('click', restartGame);
+document.getElementById('btnRestart2').addEventListener('click', restartGame);
+
+// Iniciar loop visual (pantalla de inicio)
+requestAnimationFrame(function titleLoop(ts) {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  // Partículas decorativas en menú
+  const t = ts / 1000;
+  for (let i = 0; i < 30; i++) {
+    const x = (Math.sin(i * 2.3 + t * 0.4) * 0.5 + 0.5) * W;
+    const y = (Math.cos(i * 1.7 + t * 0.3) * 0.5 + 0.5) * H;
+    ctx.beginPath();
+    ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(0,255,136,${0.1 + 0.1 * Math.sin(i + t)})`;
+    ctx.fill();
+  }
+  if (gameState === 'start') requestAnimationFrame(titleLoop);
+});
+</script>
+
+</body>
+</html>
