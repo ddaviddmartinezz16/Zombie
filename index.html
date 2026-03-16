@@ -287,12 +287,17 @@ const canvas  = document.getElementById('gameCanvas');
 const ctx     = canvas.getContext('2d');
 let W, H;
 
+// Offscreen canvas dedicado para el Fog of War
+const fogCanvas = document.createElement('canvas');
+const fogCtx    = fogCanvas.getContext('2d');
+
 function resize() {
-  W = canvas.width  = window.innerWidth;
-  H = canvas.height = window.innerHeight;
+  // Usar dimensiones CSS reales (sin DPR para evitar problemas en móvil)
+  W = canvas.width  = fogCanvas.width  = window.innerWidth;
+  H = canvas.height = fogCanvas.height = window.innerHeight;
 }
 resize();
-window.addEventListener('resize', resize);
+window.addEventListener('resize', () => { resize(); if (gameState === 'playing') initGame(); });
 
 // ---- MAPA (Laberinto) ----
 // Cada celda: 0=libre, 1=pared
@@ -820,59 +825,48 @@ function draw() {
 }
 
 // ---- FOG OF WAR + LINTERNA ----
+// Usa fogCanvas offscreen para no borrar los objetos del juego
 function drawFog() {
-  // Usamos compositing para "recortar" la oscuridad
   const px = player.x, py = player.y;
   const cs = CELL();
 
-  // Cone settings
-  const coneAngle = Math.PI * (120 / 180); // 120°
-  const coneLen   = cs * 5.5;
-  const nearR     = cs * 1.4;
+  const coneAngle = Math.PI * (130 / 180);
+  const coneLen   = cs * 7;
+  const nearR     = cs * 2.2;
 
-  // Offscreen canvas para el fog (se puede cachear si el mapa no cambia)
-  const fog = ctx; // dibujar directamente con compositing
+  // 1. Llenar fogCanvas con negro
+  fogCtx.clearRect(0, 0, W, H);
+  fogCtx.fillStyle = 'rgba(0,0,0,0.96)';
+  fogCtx.fillRect(0, 0, W, H);
 
-  fog.save();
+  // 2. Abrir ventanas de luz con destination-out
+  fogCtx.globalCompositeOperation = 'destination-out';
 
-  // Crear máscara de oscuridad
-  fog.globalCompositeOperation = 'source-over';
-
-  // Oscuridad total fuera de la linterna
-  fog.fillStyle = 'rgba(0,0,0,0.97)';
-  fog.fillRect(0, 0, W, H);
-
-  // Ahora "borrar" (destination-out) donde hay luz
-  fog.globalCompositeOperation = 'destination-out';
-
-  // 1. Zona cercana (radio pequeño alrededor del jugador)
-  const nearGrad = fog.createRadialGradient(px, py, 0, px, py, nearR);
+  const nearGrad = fogCtx.createRadialGradient(px, py, 0, px, py, nearR);
   nearGrad.addColorStop(0,   'rgba(0,0,0,1)');
-  nearGrad.addColorStop(0.7, 'rgba(0,0,0,0.9)');
+  nearGrad.addColorStop(0.6, 'rgba(0,0,0,0.9)');
   nearGrad.addColorStop(1,   'rgba(0,0,0,0)');
-  fog.fillStyle = nearGrad;
-  fog.beginPath();
-  fog.arc(px, py, nearR, 0, Math.PI * 2);
-  fog.fill();
+  fogCtx.fillStyle = nearGrad;
+  fogCtx.beginPath();
+  fogCtx.arc(px, py, nearR, 0, Math.PI * 2);
+  fogCtx.fill();
 
-  // 2. Cono de linterna
-  const halfCone = coneAngle / 2;
-  const startA = player.angle - halfCone;
-  const endA   = player.angle + halfCone;
+  const half = coneAngle / 2;
+  const coneGrad = fogCtx.createRadialGradient(px, py, nearR * 0.3, px, py, coneLen);
+  coneGrad.addColorStop(0,   'rgba(0,0,0,1)');
+  coneGrad.addColorStop(0.8, 'rgba(0,0,0,0.7)');
+  coneGrad.addColorStop(1,   'rgba(0,0,0,0)');
+  fogCtx.fillStyle = coneGrad;
+  fogCtx.beginPath();
+  fogCtx.moveTo(px, py);
+  fogCtx.arc(px, py, coneLen, player.angle - half, player.angle + half);
+  fogCtx.closePath();
+  fogCtx.fill();
 
-  // Gradiente a lo largo del cono
-  const grad = fog.createRadialGradient(px, py, nearR * 0.5, px, py, coneLen);
-  grad.addColorStop(0,   'rgba(0,0,0,1)');
-  grad.addColorStop(0.75,'rgba(0,0,0,0.85)');
-  grad.addColorStop(1,   'rgba(0,0,0,0)');
-  fog.fillStyle = grad;
-  fog.beginPath();
-  fog.moveTo(px, py);
-  fog.arc(px, py, coneLen, startA, endA);
-  fog.closePath();
-  fog.fill();
+  fogCtx.globalCompositeOperation = 'source-over';
 
-  fog.restore();
+  // 3. Composite fog sobre el canvas principal
+  ctx.drawImage(fogCanvas, 0, 0);
 }
 
 // ---- GAME OVER / WIN ----
